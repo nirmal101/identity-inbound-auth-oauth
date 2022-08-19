@@ -274,6 +274,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>com.sun.xml.parsers</groupId>
+            <artifactId>jaxp-ri</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
@@ -432,18 +437,26 @@
                     <argLine>
                         --add-opens java.base/java.util=ALL-UNNAMED
                         --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
                         --add-opens java.base/java.io=ALL-UNNAMED
+                        --add-opens java.base/java.nio.file=ALL-UNNAMED
                         --add-opens java.base/java.nio.charset=ALL-UNNAMED
                         --add-opens java.base/java.net=ALL-UNNAMED
+                        --add-opens java.base/java.security=ALL-UNNAMED
                         --add-opens java.base/java.util.stream=ALL-UNNAMED
                         --add-opens java.base/java.util.regex=ALL-UNNAMED
+                        --add-opens java.base/java.util.concurrent=ALL-UNNAMED
                         --add-opens java.base/jdk.internal.util=ALL-UNNAMED
                         --add-exports java.base/jdk.internal.loader=ALL-UNNAMED
                         --add-exports java.xml/jdk.xml.internal=ALL-UNNAMED
                         --add-opens java.xml/jdk.xml.internal=ALL-UNNAMED
+                        --add-opens java.base/jdk.internal.loader=ALL-UNNAMED
                         --add-opens java.base/sun.nio.fs=ALL-UNNAMED
                         --add-opens java.base/sun.nio.cs=ALL-UNNAMED
+                        --add-opens java.base/sun.reflect.misc=ALL-UNNAMED
                         --add-opens java.base/sun.net.www.protocol.https=ALL-UNNAMED
+                        --add-opens java.base/sun.security.util=ALL-UNNAMED
+                        --add-opens java.base/sun.security.jca=ALL-UNNAMED
                     </argLine>
                     <suiteXmlFiles>
                         <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>

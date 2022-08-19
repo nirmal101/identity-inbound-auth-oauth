@@ -60,7 +60,7 @@ import static org.wso2.carbon.identity.openidconnect.util.TestUtils.getRequestOb
 @PrepareForTest({OAuth2Util.class, IdentityUtil.class, OAuthServerConfiguration.class,
         RequestObjectValidatorImpl.class, LoggerUtils.class, IdentityTenantUtil.class, IdentityEventService.class,
         CentralLogMgtServiceComponentHolder.class})
-@PowerMockIgnore({"javax.crypto.*"})
+@PowerMockIgnore({"javax.crypto.*", "org.mockito.*"})
 public class RequestParamRequestObjectBuilderTest extends PowerMockTestCase {
 
     private RSAPrivateKey rsaPrivateKey;

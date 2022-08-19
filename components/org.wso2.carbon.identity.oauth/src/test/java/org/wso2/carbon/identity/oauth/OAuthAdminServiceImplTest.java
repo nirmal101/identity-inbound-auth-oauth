@@ -25,6 +25,7 @@ import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.internal.util.reflection.FieldSetter;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
@@ -92,7 +93,7 @@ import static org.powermock.api.mockito.PowerMockito.when;
 import static org.powermock.api.mockito.PowerMockito.whenNew;
 import static org.powermock.reflect.Whitebox.invokeMethod;
 
-@PowerMockIgnore({"javax.net.*", "javax.security.*", "javax.crypto.*"})
+@PowerMockIgnore({"javax.net.*", "javax.security.*", "javax.crypto.*", "jdk.internal.*", "org.mockito.*"})
 @PrepareForTest({OAuthAdminServiceImpl.class, IdentityCoreServiceComponent.class, ConfigurationContextService.class,
         OAuthUtil.class, OAuthAppDAO.class, OAuth2Util.class, OAuthComponentServiceHolder.class,
         IdentityUtil.class})
@@ -135,21 +136,19 @@ public class OAuthAdminServiceImplTest extends PowerMockIdentityBaseTest {
                         + File.separator + "resources");
 
         initConfigsAndRealm();
-        IdentityTenantUtil.setRealmService(realmService);
-        when(realmService.getTenantManager()).thenReturn(tenantManager);
-        when(realmService.getBootstrapRealmConfiguration()).thenReturn(realmConfiguration);
     }
 
     private void initConfigsAndRealm() throws Exception {
         IdentityCoreServiceComponent identityCoreServiceComponent = new IdentityCoreServiceComponent();
         ConfigurationContextService configurationContextService = new ConfigurationContextService
                 (configurationContext, null);
-        Whitebox.setInternalState(identityCoreServiceComponent, "configurationContextService",
-                configurationContextService);
+        FieldSetter.setField(identityCoreServiceComponent, identityCoreServiceComponent.getClass().
+                getDeclaredField("configurationContextService"), configurationContextService);
         when(configurationContext.getAxisConfiguration()).thenReturn(axisConfiguration);
 
 
         IdentityTenantUtil.setRealmService(realmService);
+        when(realmService.getTenantManager()).thenReturn(tenantManager);
         when(realmService.getBootstrapRealmConfiguration()).thenReturn(realmConfiguration);
 
 
@@ -564,8 +563,6 @@ public class OAuthAdminServiceImplTest extends PowerMockIdentityBaseTest {
         when(OAuthUtil.buildConsumerAppDTO(any())).thenCallRealMethod();
 
         OAuthAdminServiceImpl oAuthAdminServiceImpl = spy(new OAuthAdminServiceImpl());
-        doNothing().when(oAuthAdminServiceImpl, "updateAppAndRevokeTokensAndAuthzCodes", anyString(),
-                Matchers.any(Properties.class));
 
         whenNew(OAuthAppDAO.class).withNoArguments().thenReturn(oAuthAppDAO);
 
@@ -683,7 +680,6 @@ public class OAuthAdminServiceImplTest extends PowerMockIdentityBaseTest {
         oAuthAppRevocationRequestDTO.setConsumerKey("");
 
         OAuthAdminServiceImpl oAuthAdminServiceImpl = spy(new OAuthAdminServiceImpl());
-        doNothing().when(oAuthAdminServiceImpl, "triggerPreApplicationTokenRevokeListeners", anyObject());
 
         OAuthRevocationResponseDTO actualOAuthRevocationResponseDTO = oAuthAdminServiceImpl
                 .revokeIssuedTokensByApplication(oAuthAppRevocationRequestDTO);

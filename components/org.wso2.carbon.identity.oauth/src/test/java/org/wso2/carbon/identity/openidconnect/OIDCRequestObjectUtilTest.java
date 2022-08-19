@@ -68,7 +68,7 @@ import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENA
 @PrepareForTest({OAuth2Util.class, IdentityUtil.class, OAuthServerConfiguration.class, OAuthAuthzRequest.class,
         RequestObjectValidatorImpl.class, IdentityTenantUtil.class, LoggerUtils.class, IdentityEventService.class,
         CentralLogMgtServiceComponentHolder.class})
-@PowerMockIgnore({"javax.crypto.*"})
+@PowerMockIgnore({"javax.crypto.*", "org.mockito.*"})
 public class OIDCRequestObjectUtilTest extends PowerMockTestCase {
 
     private RSAPrivateKey rsaPrivateKey;

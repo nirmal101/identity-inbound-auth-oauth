@@ -623,6 +623,12 @@
                 <version>${commons-codec.test.version}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>com.sun.xml.parsers</groupId>
+                <artifactId>jaxp-ri</artifactId>
+                <version>${jaxp-ri.version}</version>
+                <scope>test</scope>
+            </dependency>
 
             <!--
                 See https://github.com/wso2-extensions/identity-inbound-auth-oauth/issues/543 for the requirement to
@@ -953,6 +959,7 @@
         <h2database.version>2.1.210</h2database.version>
         <commons-codec.test.version>1.4</commons-codec.test.version>
         <org.wso2.carbon.identity.testutil.version>5.12.49</org.wso2.carbon.identity.testutil.version>
+        <jaxp-ri.version>1.4.5</jaxp-ri.version>
         <!--SAML component version for test-->
         <carbon.identity.sso.saml.version>5.7.0</carbon.identity.sso.saml.version>
         <spring-context.version>5.1.1.RELEASE</spring-context.version>
