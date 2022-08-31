@@ -50,6 +50,7 @@ import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.anyString;
@@ -163,7 +164,7 @@ public class PasswordGrantHandlerTest extends PowerMockIdentityBaseTest {
                 new AuthenticationResult(AuthenticationResult.AuthenticationStatus.SUCCESS);
         authenticationResult.setAuthenticatedUser(userObj);
         when(userStoreManager.authenticateWithID(eq(UserCoreClaimConstants.USERNAME_CLAIM_URI),
-                anyString(), anyObject(), eq(UserCoreConstants.DEFAULT_PROFILE))).thenReturn(authenticationResult);
+                nullable(String.class), anyObject(), eq(UserCoreConstants.DEFAULT_PROFILE))).thenReturn(authenticationResult);
 
         when(applicationManagementService.getServiceProviderByClientId(anyString(), anyString(), anyString()))
                 .thenReturn(serviceProvider);
@@ -251,7 +252,7 @@ public class PasswordGrantHandlerTest extends PowerMockIdentityBaseTest {
         }
 
         when(userStoreManager.authenticateWithID(eq(UserCoreClaimConstants.USERNAME_CLAIM_URI),
-                anyString(), anyObject(), eq(UserCoreConstants.DEFAULT_PROFILE))).thenReturn(authenticationResult);
+                nullable(String.class), anyObject(), eq(UserCoreConstants.DEFAULT_PROFILE))).thenReturn(authenticationResult);
 
         mockStatic(IdentityTenantUtil.class);
         when(IdentityTenantUtil.getTenantIdOfUser(anyString())).thenReturn(1);

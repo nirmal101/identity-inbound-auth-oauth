@@ -17,18 +17,22 @@
  */
 package org.wso2.carbon.identity.oauth2;
 
+import org.apache.axis2.context.ConfigurationContext;
 import org.apache.oltu.oauth2.common.message.types.GrantType;
 import org.mockito.Mock;
+import org.mockito.internal.util.reflection.FieldSetter;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.reflect.Whitebox;
 import org.powermock.reflect.internal.WhiteboxImpl;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.common.testng.WithCarbonHome;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.oauth.OAuthUtil;
 import org.wso2.carbon.identity.oauth.cache.AppInfoCache;
@@ -69,8 +73,10 @@ import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.identity.testutil.powermock.PowerMockIdentityBaseTest;
 import org.wso2.carbon.user.core.UserRealm;
 import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.utils.ConfigurationContextService;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -78,6 +84,7 @@ import java.util.UUID;
 
 import javax.servlet.http.HttpServletRequest;
 
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyMap;
@@ -116,7 +123,9 @@ import static org.wso2.carbon.identity.openidconnect.model.Constants.RESPONSE_TY
         OAuthCache.class,
         AppInfoCache.class,
         MultitenantUtils.class,
-        LoggerUtils.class
+        LoggerUtils.class,
+        ConfigurationContextService.class,
+        IdentityCoreServiceComponent.class
 })
 public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
 
@@ -150,11 +159,25 @@ public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
     @Mock
     private HttpServletRequest mockHttpServletRequest;
 
+    @Mock
+    private ConfigurationContext mockConfigurationContext;
+
+    @Mock
+    private ConfigurationContextService mockConfigurationContextService;
+
     private OAuth2Service oAuth2Service;
     private static final String clientId = "IbWwXLf5MnKSY6x6gnR_7gd7f1wa";
 
     @BeforeMethod
     public void setUp() {
+
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
+        mockStatic(IdentityCoreServiceComponent.class);
+        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(mockConfigurationContextService);
+        when(mockConfigurationContextService.getServerConfigContext()).thenReturn(mockConfigurationContext);
 
         oAuth2Service = new OAuth2Service();
         WhiteboxImpl.setInternalState(OAuthServerConfiguration.getInstance(), "timeStampSkewInSeconds", 3600L);
@@ -625,8 +648,8 @@ public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
                     .onPreTokenRevocationByClient(any(OAuthRevocationRequestDTO.class), anyMap());
         }
         if (throwInvalidOAuthClientException) {
-            when(OAuth2Util.findAccessToken(anyObject(), anyBoolean()))
-                    .thenThrow(InvalidOAuthClientException.class);
+            given(OAuth2Util.findAccessToken(anyObject(), anyBoolean()))
+                    .willAnswer( invocation -> { throw new InvalidOAuthClientException("invalidOAuthClientException"); });
         }
         if (failClientAuthentication) {
             when(OAuth2Util.findAccessToken(anyObject(), anyBoolean()))
@@ -654,7 +677,8 @@ public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
         TokenBinding tokenBinding = new TokenBinding();
         tokenBinding.setBindingReference("dummyReference");
         accessTokenDO.setTokenBinding(tokenBinding);
-        when(OAuth2Util.findAccessToken(anyString(), anyBoolean())).thenThrow(IdentityException.class);
+        given(OAuth2Util.findAccessToken(anyString(), anyBoolean())).
+                willAnswer( invocation -> { throw new IdentityException("identityException"); });
         OAuthRevocationRequestDTO revokeRequestDTO = getOAuthRevocationRequestDTO();
 
         OAuthRevocationResponseDTO oAuthRevocationResponseDTO = oAuth2Service
@@ -804,8 +828,8 @@ public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
     public void testHandleUserConsentDenialWithException() throws Exception {
 
         OAuth2Parameters oAuth2Parameters = new OAuth2Parameters();
-        when(getResponseHander(oAuth2Parameters).handleUserConsentDenial(oAuth2Parameters))
-                .thenThrow(IdentityOAuth2Exception.class);
+        given(getResponseHander(oAuth2Parameters).handleUserConsentDenial(oAuth2Parameters))
+                .willAnswer( invocation -> { throw new IdentityOAuth2Exception("identityOAuth2Exception"); });
         assertNull(oAuth2Service.handleUserConsentDenial(oAuth2Parameters));
     }
 
@@ -821,8 +845,8 @@ public class OAuth2ServiceTest extends PowerMockIdentityBaseTest {
     public void testHandleAuthenticationFailureWithException() throws Exception {
 
         OAuth2Parameters oAuth2Parameters = new OAuth2Parameters();
-        when(getResponseHander(oAuth2Parameters).handleAuthenticationFailure(oAuth2Parameters))
-                .thenThrow(IdentityOAuth2Exception.class);
+        given(getResponseHander(oAuth2Parameters).handleAuthenticationFailure(oAuth2Parameters))
+                .willAnswer( invocation -> { throw new IdentityOAuth2Exception("identityOAuth2Exception"); });
         assertNull(oAuth2Service.handleAuthenticationFailure(oAuth2Parameters));
     }
 

@@ -83,7 +83,7 @@ import static org.powermock.api.mockito.PowerMockito.when;
         files = {"dbScripts/h2_with_application_and_token.sql", "dbScripts/identity.sql"})
 @WithKeyStore
 @PrepareForTest({IdentityUtil.class, IdentityTenantUtil.class, OAuthUtil.class, IdentityDatabaseUtil.class})
-@PowerMockIgnore({"javax.crypto.*"})
+@PowerMockIgnore({"javax.crypto.*", "org.mockito.*"})
 public class JWTTokenGeneratorTest extends PowerMockIdentityBaseTest {
 
     private DefaultOAuth2TokenValidator defaultOAuth2TokenValidator;

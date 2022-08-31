@@ -16,13 +16,22 @@
 
 package org.wso2.carbon.identity.oauth2;
 
+import org.apache.axis2.context.ConfigurationContext;
+import org.apache.axis2.engine.AxisConfiguration;
+import org.apache.commons.dbcp.BasicDataSource;
+import org.apache.commons.dbcp.PoolingDataSource;
 import org.apache.commons.lang.StringUtils;
+import org.mockito.Mock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.testng.PowerMockTestCase;
 import org.powermock.reflect.Whitebox;
 import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.caching.impl.DataHolder;
 import org.wso2.carbon.caching.impl.TenantCacheManager;
 import org.wso2.carbon.identity.base.IdentityException;
@@ -30,23 +39,37 @@ import org.wso2.carbon.identity.common.testng.WithCarbonHome;
 import org.wso2.carbon.identity.common.testng.WithH2Database;
 import org.wso2.carbon.identity.common.testng.WithRealmService;
 import org.wso2.carbon.identity.common.testng.WithRegistry;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.cache.OAuthScopeCache;
 import org.wso2.carbon.identity.oauth.cache.OAuthScopeCacheKey;
 import org.wso2.carbon.identity.oauth2.bean.Scope;
+import org.wso2.carbon.identity.oauth2.dao.util.DAOUtils;
 import org.wso2.carbon.identity.oauth2.model.OAuth2ScopeConsentResponse;
 import org.wso2.carbon.identity.oauth2.util.Oauth2ScopeUtils;
+import org.wso2.carbon.utils.CarbonUtils;
+import org.wso2.carbon.utils.ConfigurationContextService;
+import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
+import java.io.File;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.powermock.api.mockito.PowerMockito.mockStatic;
+import static org.powermock.api.mockito.PowerMockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.fail;
@@ -55,11 +78,25 @@ import static org.testng.Assert.fail;
 @WithRegistry
 @WithRealmService
 @WithH2Database(files = {"dbScripts/scope.sql", "dbScripts/h2.sql"})
+@PrepareForTest({CarbonUtils.class, IdentityTenantUtil.class, Oauth2ScopeUtils.class, ConfigurationContextService.class,
+        IdentityCoreServiceComponent.class, IdentityDatabaseUtil.class})
+@PowerMockIgnore({"org.mockito.*"})
 public class OAuth2ScopeServiceTest extends PowerMockTestCase {
 
     private OAuth2ScopeService oAuth2ScopeService;
     private static final String SCOPE_NAME = "dummyScopeName";
     private static final String SCOPE_DESCRIPTION = "dummyScopeDescription";
+    public static final String DB_NAME = "jdbc/WSO2CarbonDB";
+    public static final String H2_SCRIPT1_NAME = "h2.sql";
+    public static final String H2_SCRIPT2_NAME = "identity.sql";
+    Connection connection = null;
+
+    @Mock
+    private ConfigurationContextService mockConfigurationContextService;
+    @Mock
+    private ConfigurationContext mockConfigurationContext;
+    @Mock
+    private AxisConfiguration mockAxisConfiguration;
 
     @DataProvider(name = "indexAndCountProvider")
     public static Object[][] indexAndCountProvider() {
@@ -70,14 +107,50 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
                 {1, 2}};
     }
 
+    @BeforeClass
+    public void setUpBeforeClass() throws Exception {
+
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
+        System.setProperty(
+                "java.naming.factory.initial",
+                "org.wso2.carbon.identity.common.testng.MockInitialContextFactory"
+                          );
+
+        DAOUtils.initializeDataSource(DB_NAME, DAOUtils.getFilePath(H2_SCRIPT1_NAME));
+        DAOUtils.initializeDataSource(DB_NAME, DAOUtils.getFilePath(H2_SCRIPT2_NAME));
+    }
+
     @BeforeMethod
     public void setUp() throws Exception {
+
+        mockStatic(IdentityTenantUtil.class);
+        when(IdentityTenantUtil.getTenantDomain(anyInt())).thenReturn(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
 
         oAuth2ScopeService = new OAuth2ScopeService();
         IdentityUtil.populateProperties();
         // Removing the cache manager for tenant to reset the caches added by other tenants.
         ((TenantCacheManager) DataHolder.getInstance().getCachingProvider().getCacheManagerFactory())
                 .removeCacheManagerMap("carbon.super");
+
+        if (connection == null) {
+            connection = DAOUtils.getConnection(DB_NAME);
+        }
+
+        mockStatic(IdentityDatabaseUtil.class);
+        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(connection);
+        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
+        when(IdentityDatabaseUtil.getDBConnection()).thenReturn(connection);
+
+        mockStatic(Oauth2ScopeUtils.class);
+        mockStatic(IdentityCoreServiceComponent.class);
+
+        when(Oauth2ScopeUtils.getTenantID()).thenReturn(MultitenantConstants.SUPER_TENANT_ID);
+        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(mockConfigurationContextService);
+        when(mockConfigurationContextService.getServerConfigContext()).thenReturn(mockConfigurationContext);
+        when(mockConfigurationContext.getAxisConfiguration()).thenReturn(mockAxisConfiguration);
     }
 
     @AfterMethod
@@ -87,6 +160,23 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
         Whitebox.setInternalState(IdentityUtil.class, "eventListenerConfiguration", new HashMap<>());
         Whitebox.setInternalState(IdentityUtil.class, "identityCacheConfigurationHolder", new HashMap<>());
         Whitebox.setInternalState(IdentityUtil.class, "identityCookiesConfigurationHolder", new HashMap<>());
+    }
+
+    public static String getFilePath(String fileName) {
+
+        if (StringUtils.isNotBlank(fileName)) {
+            URL url = OAuth2ScopeServiceTest.class.getClassLoader().getResource(fileName);
+            if (url != null) {
+                try {
+                    File file = new File(url.toURI());
+                    return file.getAbsolutePath();
+                } catch (URISyntaxException e) {
+                    throw new IllegalArgumentException("Could not resolve a file with given path: " +
+                            url.toExternalForm());
+                }
+            }
+        }
+        throw new IllegalArgumentException("DB Script file name cannot be empty.");
     }
 
     @Test
@@ -248,7 +338,7 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
         String appId = UUID.randomUUID().toString();
         insertAppId(appId);
         oAuth2ScopeService.addUserConsentForApplication("user_id", appId, 1, approvedScopes, deniedScopes);
-
+        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(DAOUtils.getConnection(DB_NAME));
         OAuth2ScopeConsentResponse oAuth2ScopeConsentResponse = oAuth2ScopeService.getUserConsentForApp("user_id",
                 appId, 1);
         assertEquals(oAuth2ScopeConsentResponse.getApprovedScopes().get(0), approvedScopes.get(0));
@@ -258,8 +348,7 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
     private void insertAppId(String uuid) throws Exception {
 
         String sql = "INSERT INTO SP_APP (TENANT_ID, APP_NAME, UUID) VALUES (?,?,?)";
-        try (Connection connection = IdentityDatabaseUtil.getDBConnection();
-             PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, 1);
             ps.setString(2, "dummyAppName");
             ps.setString(3, uuid);
@@ -348,7 +437,7 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
         String uuid = UUID.randomUUID().toString();
         insertAppId(uuid);
         oAuth2ScopeService.addUserConsentForApplication("user_id", uuid, 1, approvedScopes, deniedScopes);
-
+        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(DAOUtils.getConnection(DB_NAME));
         oAuth2ScopeService.updateUserConsentForApplication("user_id", uuid, 1, newApprovedScopes, newDeniedScopes);
 
         OAuth2ScopeConsentResponse oAuth2ScopeConsentResponse = oAuth2ScopeService
@@ -384,8 +473,8 @@ public class OAuth2ScopeServiceTest extends PowerMockTestCase {
         List<String> deniedScopes = new ArrayList<>(Arrays.asList("delete"));
         String uuid = UUID.randomUUID().toString();
         insertAppId(uuid);
+        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
         oAuth2ScopeService.addUserConsentForApplication("user_id", uuid, 1, approvedScopes, deniedScopes);
-
         oAuth2ScopeService.revokeUserConsentForApplication("user_id", uuid, 1);
 
         OAuth2ScopeConsentResponse oAuth2ScopeConsentResponse = oAuth2ScopeService

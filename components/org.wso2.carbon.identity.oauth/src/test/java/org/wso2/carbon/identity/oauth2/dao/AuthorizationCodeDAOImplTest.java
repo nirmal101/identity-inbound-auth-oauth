@@ -18,8 +18,10 @@
 
 package org.wso2.carbon.identity.oauth2.dao;
 
+import org.apache.axis2.context.ConfigurationContext;
 import org.apache.commons.dbcp.BasicDataSource;
 import org.mockito.Mock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
@@ -27,11 +29,16 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.common.testng.WithCarbonHome;
+import org.wso2.carbon.identity.common.testng.WithRealmService;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceDataHolder;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
@@ -41,9 +48,17 @@ import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.model.AuthzCodeDO;
 import org.wso2.carbon.identity.oauth2.util.OAuth2TokenUtil;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
+import org.wso2.carbon.identity.oauth2.util.Oauth2ScopeUtils;
 import org.wso2.carbon.identity.testutil.powermock.PowerMockIdentityBaseTest;
 import org.wso2.carbon.user.core.UserCoreConstants;
+import org.wso2.carbon.user.core.UserRealm;
+import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.user.core.service.RealmService;
+import org.wso2.carbon.utils.CarbonUtils;
+import org.wso2.carbon.utils.ConfigurationContextService;
+import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
@@ -55,10 +70,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyObject;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyObject;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.powermock.api.mockito.PowerMockito.doNothing;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
@@ -69,8 +86,11 @@ import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getTenantId;
  * Unit tests for AuthorizationCodeDAOImpl.
  */
 @WithCarbonHome
+@WithRealmService
 @PrepareForTest({IdentityDatabaseUtil.class, OAuth2Util.class, OAuth2TokenUtil.class, IdentityUtil.class,
-        OAuthServerConfiguration.class})
+        OAuthServerConfiguration.class, CarbonUtils.class, IdentityTenantUtil.class, IdentityCoreServiceComponent.class,
+        IdentityCoreServiceDataHolder.class, Oauth2ScopeUtils.class})
+@PowerMockIgnore({"jdk.internal.*", "org.mockito.*"})
 public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
 
     public static Map<String, BasicDataSource> dataSourceMap = new HashMap<>();
@@ -83,6 +103,24 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
 
     @Mock
     private ApplicationManagementService mockedApplicationManagementService;
+
+    @Mock
+    private ConfigurationContextService mockedConfigurationContextService;
+
+    @Mock
+    private ConfigurationContext mockedConfigurationContext;
+
+    @Mock
+    private IdentityCoreServiceDataHolder identityCoreServiceDataHolder;
+
+    @Mock
+    private RealmService realmService;
+
+    @Mock
+    private UserRealm userRealm;
+
+    @Mock
+    private UserStoreManager userStoreManager;
 
     private Connection connection;
 
@@ -100,7 +138,6 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
 
         //Initializing the database.
         DAOUtils.initializeDataSource(DB_NAME, DAOUtils.getFilePath("identity.sql"));
-        authorizationCodeDAO = new AuthorizationCodeDAOImpl();
         scopes = new String[]{"sms", "openid", "email"};
         authenticatedUser.setTenantDomain("super.wso2");
         authenticatedUser.setUserName("randomUser");
@@ -111,6 +148,16 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
     @BeforeMethod
     public void setup() throws Exception {
 
+
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
+        mockStatic(IdentityCoreServiceComponent.class);
+        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(mockedConfigurationContextService);
+        when(mockedConfigurationContextService.getServerConfigContext()).thenReturn(mockedConfigurationContext);
+
+        authorizationCodeDAO = new AuthorizationCodeDAOImpl();
         connection = DAOUtils.getConnection(DB_NAME);
         mockStatic(IdentityDatabaseUtil.class);
         when(IdentityDatabaseUtil.getDBConnection()).thenReturn(connection);
@@ -144,9 +191,16 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         AuthzCodeDO authzCodeDO = new AuthzCodeDO(authenticatedUser, scopes, new Timestamp(System.currentTimeMillis()),
                 3600000L, CALLBACK, consumerKey, authzCode, authzCodeId, status, null, null);
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        mockStatic(IdentityTenantUtil.class);
+        when(IdentityTenantUtil.getTenantDomain(anyInt())).thenReturn(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         when(OAuth2Util.getUserStoreDomain(any())).thenReturn(UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME);
         when(OAuth2Util.getAuthenticatedIDP(any())).thenReturn("LOCAL");
+        mockStatic(IdentityCoreServiceDataHolder.class);
+        when(IdentityCoreServiceDataHolder.getInstance()).thenReturn(identityCoreServiceDataHolder);
+        when(identityCoreServiceDataHolder.getRealmService()).thenReturn(realmService);
+        when(realmService.getTenantUserRealm(anyInt())).thenReturn(userRealm);
+        when(userRealm.getUserStoreManager()).thenReturn(userStoreManager);
         authorizationCodeDAO.insertAuthorizationCode(authzCode, consumerKey, CALLBACK, authzCodeDO);
         return authzCodeDO;
     }
@@ -169,7 +223,7 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         String authzCodeID = UUID.randomUUID().toString();
         String authzCode = UUID.randomUUID().toString();
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         AuthzCodeDO authzCodeDO = persistAuthorizationCode(consumerKey, authzCodeID, authzCode,
                 OAuthConstants.AuthorizationCodeState.ACTIVE);
 
@@ -185,7 +239,7 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         String authzCodeID = UUID.randomUUID().toString();
         String authzCode = UUID.randomUUID().toString();
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         AuthzCodeDO authzCodeDO = persistAuthorizationCode(consumerKey, authzCodeID, authzCode,
                 OAuthConstants.AuthorizationCodeState.ACTIVE);
         Set<String> availableAuthzCodes = new HashSet<>();
@@ -207,7 +261,7 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         String authzCodeID2 = UUID.randomUUID().toString();
         String authzCode2 = UUID.randomUUID().toString();
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         AuthzCodeDO authzCodeDO1 = persistAuthorizationCode(consumerKey1, authzCodeID1, authzCode1,
                 OAuthConstants.AuthorizationCodeState.ACTIVE);
         AuthzCodeDO authzCodeDO2 = persistAuthorizationCode(consumerKey2, authzCodeID2, authzCode2,
@@ -239,13 +293,13 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         dummyAuthenticatedUser.setUserName("MockedUser");
         dummyAuthenticatedUser.setUserStoreDomain(UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME);
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         when(OAuth2Util.getUserStoreDomain(any())).thenReturn(UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME);
         AuthzCodeDO authzCodeDO = persistAuthorizationCode(consumerKey, authzCodeID, authzCode,
                 OAuthConstants.AuthorizationCodeState.ACTIVE);
         mockStatic(OAuth2Util.class);
         mockStatic(IdentityUtil.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         when(IdentityUtil.isUserStoreInUsernameCaseSensitive(anyString())).thenReturn(true);
         when(OAuth2Util.isHashDisabled()).thenReturn(true);
         // Allow the method to pass the validation without wanting to traverse internally.
@@ -268,8 +322,8 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         OAuth2ServiceComponentHolder.setApplicationMgtService(mockedApplicationManagementService);
         when(mockedApplicationManagementService.getServiceProviderByClientId(anyString(), any(), anyString())).
                 thenReturn(mockedServiceProvider);
-        when(OAuth2Util.createAuthenticatedUser(anyString(), anyString(), anyString(), anyString())).
-                thenReturn(mockedAuthenticatedUser);
+        when(OAuth2Util.createAuthenticatedUser(anyString(), anyString(), nullable(String.class),
+                nullable(String.class))).thenReturn(mockedAuthenticatedUser);
         doNothing().when(mockedAuthenticatedUser, "setAuthenticatedSubjectIdentifier", anyString(), anyObject());
 
         Assert.assertNotNull(authorizationCodeDAO.validateAuthorizationCode(authzCodeDO.getConsumerKey(),
@@ -286,7 +340,7 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         String authzCodeID2 = UUID.randomUUID().toString();
         String authzCode2 = UUID.randomUUID().toString();
         mockStatic(OAuth2Util.class);
-        when(getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         persistAuthorizationCode(consumerKey1, authzCodeID1, authzCode1, OAuthConstants.AuthorizationCodeState.ACTIVE);
         String[] tempScope = new String[]{"sms", "email"};
         AuthzCodeDO authzCodeDO = persistAuthorizationCodeWithModifiedScope(consumerKey2, authzCodeID2, authzCode2,
@@ -314,11 +368,11 @@ public class AuthorizationCodeDAOImplTest extends PowerMockIdentityBaseTest {
         persistAuthorizationCodeWithModifiedScope(consumerKey2, authzCodeID2, authzCode2,
                 OAuthConstants.AuthorizationCodeState.ACTIVE, tempScope);
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         when(OAuth2Util.getUserStoreDomain(any())).thenReturn(UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME);
         mockStatic(OAuth2Util.class);
         mockStatic(IdentityUtil.class);
-        when(OAuth2Util.getTenantId(anyString())).thenReturn(DEFAULT_TENANT_ID);
+        when(OAuth2Util.getTenantId(nullable(String.class))).thenReturn(DEFAULT_TENANT_ID);
         when(IdentityUtil.isUserStoreInUsernameCaseSensitive(anyString())).thenReturn(true);
         when(OAuth2Util.isHashDisabled()).thenReturn(true);
         // Allow the method to pass the validation without wanting to traverse internally.

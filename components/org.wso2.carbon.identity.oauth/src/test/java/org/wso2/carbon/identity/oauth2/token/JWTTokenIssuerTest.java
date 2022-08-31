@@ -60,6 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyObject;
@@ -123,6 +124,10 @@ public class JWTTokenIssuerTest extends PowerMockIdentityBaseTest {
         initMocks(this);
         mockStatic(OAuthServerConfiguration.class);
         when(OAuthServerConfiguration.getInstance()).thenReturn(oAuthServerConfiguration);
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
     }
 
     @AfterMethod
@@ -200,7 +205,7 @@ public class JWTTokenIssuerTest extends PowerMockIdentityBaseTest {
     @Test(expectedExceptions = IdentityOAuth2Exception.class)
     public void testCreateJWTClaimSetForInvalidClient() throws Exception {
         mockStatic(OAuth2Util.class);
-        when(OAuth2Util.getAppInformationByClientId(anyString()))
+        when(OAuth2Util.getAppInformationByClientId(nullable(String.class)))
                 .thenThrow(new InvalidOAuthClientException("INVALID_CLIENT"));
         when(oAuthServerConfiguration.getSignatureAlgorithm()).thenReturn(SHA256_WITH_HMAC);
 
@@ -261,7 +266,7 @@ public class JWTTokenIssuerTest extends PowerMockIdentityBaseTest {
         mockStatic(OAuth2Util.class);
         when(OAuth2Util.getAppInformationByClientId(anyString())).thenReturn(appDO);
         when(OAuth2Util.getIDTokenIssuer()).thenReturn(ID_TOKEN_ISSUER);
-        when(OAuth2Util.getIdTokenIssuer(anyString())).thenReturn(ID_TOKEN_ISSUER);
+        when(OAuth2Util.getIdTokenIssuer(nullable(String.class))).thenReturn(ID_TOKEN_ISSUER);
         when(OAuth2Util.getOIDCAudience(anyString(), anyObject())).thenReturn(Collections.singletonList
                 (DUMMY_CLIENT_ID));
 

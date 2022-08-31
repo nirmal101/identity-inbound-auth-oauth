@@ -18,13 +18,19 @@
 
 package org.wso2.carbon.identity.openidconnect;
 
+import org.apache.axis2.context.ConfigurationContext;
+import org.apache.axis2.engine.AxisConfiguration;
+import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.testng.PowerMockTestCase;
 import org.powermock.reflect.internal.WhiteboxImpl;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.impl.consent.ClaimMetaData;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.impl.consent.SSOConsentService;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.impl.consent.SSOConsentServiceImpl;
@@ -39,6 +45,8 @@ import org.wso2.carbon.identity.common.testng.WithCarbonHome;
 import org.wso2.carbon.identity.common.testng.WithH2Database;
 import org.wso2.carbon.identity.common.testng.WithRealmService;
 import org.wso2.carbon.identity.common.testng.WithRegistry;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.oauth.dto.ScopeDTO;
 import org.wso2.carbon.identity.oauth2.TestConstants;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
@@ -51,7 +59,13 @@ import org.wso2.carbon.registry.core.Resource;
 import org.wso2.carbon.registry.core.ResourceImpl;
 import org.wso2.carbon.registry.core.service.RegistryService;
 import org.wso2.carbon.registry.core.session.UserRegistry;
+import org.wso2.carbon.user.api.RealmConfiguration;
+import org.wso2.carbon.user.core.tenant.TenantManager;
+import org.wso2.carbon.user.core.service.RealmService;
+import org.wso2.carbon.utils.ConfigurationContextService;
+import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,13 +77,17 @@ import java.util.Set;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyString;
+import static org.powermock.api.mockito.PowerMockito.mock;
+import static org.powermock.api.mockito.PowerMockito.mockStatic;
+import static org.powermock.api.mockito.PowerMockito.when;
 import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
 
 @WithCarbonHome
 @WithRegistry
 @WithRealmService
 @WithH2Database(files = {"dbScripts/scope_claim.sql"})
-public class OpenIDConnectClaimFilterImplTest extends PowerMockito {
+@PrepareForTest({IdentityTenantUtil.class, ConfigurationContextService.class, IdentityCoreServiceComponent.class})
+public class OpenIDConnectClaimFilterImplTest extends PowerMockTestCase {
 
     private static final String SP_TENANT_DOMAIN = "carbon.super";
     private static final String CLIENT_ID = TestConstants.CLIENT_ID;
@@ -82,6 +100,24 @@ public class OpenIDConnectClaimFilterImplTest extends PowerMockito {
     private List  scopeDTOList;
     private Map<String, Object> claims;
     private Resource resource;
+
+    @Mock
+    private ConfigurationContextService configurationContextService;
+
+    @Mock
+    private TenantManager tenantManager;
+
+    @Mock
+    private RealmService realmService;
+
+    @Mock
+    private RealmConfiguration realmConfiguration;
+
+    @Mock
+    private ConfigurationContext configurationContext;
+
+    @Mock
+    private AxisConfiguration axisConfiguration;
 
     @BeforeClass
     public void setUp() throws Exception {
@@ -117,7 +153,28 @@ public class OpenIDConnectClaimFilterImplTest extends PowerMockito {
                 .thenReturn(externalClaims);
         List claimsWithConsent = getClaimsWithConsent();
         when(ssoConsentService.getClaimsWithConsents(any(), any())).thenReturn(claimsWithConsent);
+    }
 
+    @BeforeMethod
+    private void initConfigsAndRealm() throws Exception {
+
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
+
+        mockStatic(IdentityTenantUtil.class);
+        when(IdentityTenantUtil.getTenantDomain(anyInt())).thenReturn(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+        when(IdentityTenantUtil.getTenantId(anyString())).thenReturn(-1234);
+
+        mockStatic(IdentityCoreServiceComponent.class);
+        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(configurationContextService);
+        when(configurationContextService.getServerConfigContext()).thenReturn(configurationContext);
+        when(configurationContext.getAxisConfiguration()).thenReturn(axisConfiguration);
+
+        IdentityTenantUtil.setRealmService(realmService);
+        when(realmService.getTenantManager()).thenReturn(tenantManager);
+        when(realmService.getBootstrapRealmConfiguration()).thenReturn(realmConfiguration);
     }
 
     @Test

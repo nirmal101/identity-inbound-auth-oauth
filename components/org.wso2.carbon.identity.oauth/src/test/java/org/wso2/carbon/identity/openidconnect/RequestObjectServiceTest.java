@@ -18,14 +18,20 @@
 
 package org.wso2.carbon.identity.openidconnect;
 
+import org.apache.axis2.context.ConfigurationContext;
+import org.mockito.Mock;
+import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.testng.PowerMockTestCase;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.identity.common.testng.WithCarbonHome;
 import org.wso2.carbon.identity.common.testng.WithH2Database;
 import org.wso2.carbon.identity.common.testng.WithRealmService;
 import org.wso2.carbon.identity.common.testng.WithRegistry;
+import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.oauth.tokenprocessor.HashingPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
@@ -34,18 +40,24 @@ import org.wso2.carbon.identity.oauth2.TestConstants;
 import org.wso2.carbon.identity.oauth2.dao.SQLQueries;
 import org.wso2.carbon.identity.openidconnect.dao.RequestObjectDAOImpl;
 import org.wso2.carbon.identity.openidconnect.model.RequestedClaim;
+import org.wso2.carbon.utils.ConfigurationContextService;
 
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.powermock.api.mockito.PowerMockito.mockStatic;
+import static org.powermock.api.mockito.PowerMockito.when;
+
 @WithCarbonHome
 @WithRegistry
 @WithRealmService
 @WithH2Database(jndiName = "jdbc/WSO2IdentityDB",
         files = {"dbScripts/h2_with_application_and_token.sql", "dbScripts/identity.sql"})
+@PrepareForTest({IdentityDatabaseUtil.class, IdentityCoreServiceComponent.class})
 public class RequestObjectServiceTest extends PowerMockTestCase {
 
     private static final String consumerKey = TestConstants.CLIENT_ID;
@@ -58,6 +70,12 @@ public class RequestObjectServiceTest extends PowerMockTestCase {
 
     private RequestObjectService requestObjectService;
     private List<List<RequestedClaim>> requestedEssentialClaims;
+
+    @Mock
+    private ConfigurationContextService mockedConfigurationContextService;
+
+    @Mock
+    private ConfigurationContext mockedConfigurationContext;
 
     @BeforeClass
     public void setUp() {
@@ -83,6 +101,19 @@ public class RequestObjectServiceTest extends PowerMockTestCase {
         lstRequestedClams.add(requestedClaimForEmail);
         lstRequestedClams.add(requestedClaimForAddress);
         requestedEssentialClaims.add(lstRequestedClams);
+    }
+
+    @BeforeMethod
+    public void setCarbonHomeAndConfigContext() {
+
+        System.setProperty(
+                CarbonBaseConstants.CARBON_HOME,
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString()
+                          );
+        mockStatic(IdentityCoreServiceComponent.class);
+        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(
+                mockedConfigurationContextService);
+        when(mockedConfigurationContextService.getServerConfigContext()).thenReturn(mockedConfigurationContext);
     }
 
     @Test
